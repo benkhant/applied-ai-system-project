@@ -67,11 +67,11 @@ Current tests verify:
 
 ## 📸 Demo
 
-![PawPal App](assets/pawpal_app_screenshot.png)
+![PawPal App](assets/screenshots/pawpal_app_screenshot.png)
 
 ## UML
 
 Final UML files:
 
-- [Mermaid Source](uml_final.mmd)
-- [UML Diagram](assets/uml_final.png)
+![Mermaid Source](assets/diagrams/uml_final.mmd)
+![System UML](assets/diagrams/uml_final.png)
