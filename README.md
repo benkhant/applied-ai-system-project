@@ -67,8 +67,11 @@ Current tests verify:
 
 ## 📸 Demo
 
-[![PawPal App](pawpal_app_screenshot.png)](pawpal_app_screenshot.png)
+![PawPal App](assets/pawpal_app_screenshot.png)
 
 ## UML
 
-Final UML files are available at [uml_final.mmd](uml_final.mmd) and [uml_final.png](uml_final.png).
+Final UML files:
+
+- [Mermaid Source](uml_final.mmd)
+- [UML Diagram](assets/uml_final.png)
