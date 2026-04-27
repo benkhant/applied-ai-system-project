@@ -181,6 +181,26 @@ Resulting output:
 - Conflict detection checks exact preferred-time matches; it does not yet compute overlap intervals.
 - AI-assisted scoring is deterministic and auditable, but less flexible than full generative planning.
 
+## Reliability and Evaluation
+
+This project demonstrates reliability using four methods:
+
+- Automated tests: [tests/test_pawpal.py](tests/test_pawpal.py) validates rule-based behavior, AI prioritization, and guardrail fallback.
+- Batch reliability checks: [reliability_eval.py](reliability_eval.py) measures consistency and failure rates across repeated trials.
+- Logging and error visibility: planner events and guardrail issues are written to [logs/pawpal.log](logs/pawpal.log).
+- Human evaluation: schedule outputs and AI rationale are reviewed in the Streamlit UI before final use.
+
+Current reliability snapshot:
+
+- 14 out of 14 automated tests passed.
+- Reliability evaluation (20 trials) produced 1 unique plan ordering.
+- Consistency rate was 100.00%.
+- Guardrail failure rate was 0.00% and fallback usage rate was 0.00%.
+
+Interpretation:
+
+The system is stable on covered scenarios and reliably enforces validation rules. The current limitation is scope breadth: reliability metrics are strong for tested inputs, but future work should add harder edge cases (missing context, noisy task text, and duration-overlap conflicts).
+
 ## Testing Summary
 
 What worked:
