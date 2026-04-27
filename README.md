@@ -239,6 +239,6 @@ This project reinforced that practical AI engineering is mostly systems design, 
 
 Loom walkthrough (end-to-end system run):
 
-- https://www.loom.com/share/fe3c6d022b9644ac8546d4b4f648267b
-
+- https://www.loom.com/share/e5282038976e49ab9ec9f956f0852a4c
+  
 ![PawPal App](assets/screenshots/pawpal_app_screenshot.png)
