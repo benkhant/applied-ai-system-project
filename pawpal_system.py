@@ -2,7 +2,86 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from dataclasses import dataclass, field
+import json
+import logging
+import re
 from typing import Dict, List, Optional, Tuple
+
+
+logger = logging.getLogger("pawpal.scheduler")
+
+
+@dataclass
+class KnowledgeItem:
+    species: str
+    keywords: List[str]
+    guidance: str
+    urgency_boost: int
+
+
+class CareKnowledgeBase:
+    """Small retrieval corpus used to augment plan ranking decisions."""
+
+    def __init__(self) -> None:
+        self.items: List[KnowledgeItem] = [
+            KnowledgeItem(
+                species="dog",
+                keywords=["medication", "pill", "dose", "medicine"],
+                guidance="Medication timing should be consistent and not skipped.",
+                urgency_boost=70,
+            ),
+            KnowledgeItem(
+                species="cat",
+                keywords=["litter", "box", "clean"],
+                guidance="Litter maintenance helps prevent stress and hygiene issues.",
+                urgency_boost=25,
+            ),
+            KnowledgeItem(
+                species="all",
+                keywords=["feed", "meal", "food", "breakfast", "dinner"],
+                guidance="Feeding tasks are routine anchors and should happen on time.",
+                urgency_boost=30,
+            ),
+            KnowledgeItem(
+                species="all",
+                keywords=["walk", "exercise", "play"],
+                guidance="Exercise tasks support behavior and long-term health.",
+                urgency_boost=15,
+            ),
+            KnowledgeItem(
+                species="all",
+                keywords=["groom", "brush", "bath", "nail"],
+                guidance="Grooming reduces discomfort and catches early warning signs.",
+                urgency_boost=10,
+            ),
+        ]
+
+    def _tokenize(self, text: str) -> List[str]:
+        return re.findall(r"[a-z0-9]+", text.lower())
+
+    def retrieve(self, task: Task, species: str, top_k: int = 2) -> List[KnowledgeItem]:
+        """Return the most relevant knowledge items for this task and species."""
+        query_tokens = set(
+            self._tokenize(
+                f"{task.title} {task.description} {task.priority} {task.preferred_time}"
+            )
+        )
+        if not query_tokens:
+            return []
+
+        scored_matches: List[Tuple[KnowledgeItem, int]] = []
+        for item in self.items:
+            if item.species not in ("all", species.lower()):
+                continue
+
+            overlap = len(query_tokens.intersection(set(item.keywords)))
+            if overlap == 0:
+                continue
+
+            scored_matches.append((item, overlap))
+
+        scored_matches.sort(key=lambda pair: pair[1], reverse=True)
+        return [item for item, _score in scored_matches[:top_k]]
 
 
 @dataclass
@@ -128,6 +207,10 @@ class Owner:
 
 
 class Scheduler:
+    def __init__(self, knowledge_base: Optional[CareKnowledgeBase] = None) -> None:
+        self.knowledge_base = knowledge_base or CareKnowledgeBase()
+        self._last_plan_metadata: Dict[str, object] = {}
+
     def get_all_tasks_for_owner(self, owner: Owner) -> List[Task]:
         """Helper: query owner for all tasks across all owned pets."""
         return owner.get_all_incomplete_tasks()
@@ -140,7 +223,116 @@ class Scheduler:
             tasks = self.get_all_tasks_for_owner(owner)
 
         # Rank tasks and return ordered plan
-        return self.rank_tasks(tasks, owner)
+        plan = self.rank_tasks(tasks, owner)
+        self._last_plan_metadata = {
+            "mode": "rule_based",
+            "guardrail_ok": True,
+            "guardrail_issues": [],
+            "fallback_used": False,
+            "rationale": {},
+        }
+        return plan
+
+    def build_ai_daily_plan(self, owner: Owner, pet: Pet = None) -> List[Task]:
+        """Build a plan using retrieval-augmented scoring plus guardrails."""
+        if pet:
+            tasks = pet.get_incomplete_tasks()
+            task_species = {id(task): pet.species for task in tasks}
+        else:
+            tasks = self.get_all_tasks_for_owner(owner)
+            task_species = {}
+            for owner_pet in owner.get_pets():
+                for task in owner_pet.get_incomplete_tasks():
+                    task_species[id(task)] = owner_pet.species
+
+        if not tasks:
+            self._last_plan_metadata = {
+                "mode": "ai_assisted",
+                "guardrail_ok": True,
+                "guardrail_issues": [],
+                "fallback_used": False,
+                "rationale": {},
+            }
+            return []
+
+        scored_tasks: List[Tuple[Task, int, List[KnowledgeItem]]] = []
+        rationale: Dict[str, List[str]] = {}
+        for task in tasks:
+            species = task_species.get(id(task), "all")
+            retrieved = self.knowledge_base.retrieve(task, species)
+            retrieval_boost = sum(item.urgency_boost for item in retrieved)
+            total_score = self.score_task(task, owner) + retrieval_boost
+
+            rationale[task.title] = [item.guidance for item in retrieved]
+            scored_tasks.append((task, total_score, retrieved))
+
+        scored_tasks.sort(key=lambda row: row[1], reverse=True)
+        ai_ranked_plan = [task for task, _score, _retrieved in scored_tasks]
+
+        guardrail_ok, guardrail_issues = self.validate_plan(ai_ranked_plan, tasks)
+        fallback_used = False
+        final_plan = ai_ranked_plan
+        if not guardrail_ok:
+            fallback_used = True
+            final_plan = self.rank_tasks(tasks, owner)
+
+        self._last_plan_metadata = {
+            "mode": "ai_assisted",
+            "guardrail_ok": guardrail_ok,
+            "guardrail_issues": guardrail_issues,
+            "fallback_used": fallback_used,
+            "rationale": rationale,
+        }
+
+        logger.info(
+            json.dumps(
+                {
+                    "event": "plan_generated",
+                    "mode": "ai_assisted",
+                    "task_count": len(tasks),
+                    "owner_available_minutes": owner.available_minutes,
+                    "guardrail_ok": guardrail_ok,
+                    "fallback_used": fallback_used,
+                    "guardrail_issues": guardrail_issues,
+                }
+            )
+        )
+
+        return final_plan
+
+    def validate_plan(self, plan: List[Task], source_tasks: List[Task]) -> Tuple[bool, List[str]]:
+        """Validate plan output and return guardrail status and issue list."""
+        issues: List[str] = []
+        allowed_priorities = {"low", "medium", "high"}
+
+        seen_task_ids = set()
+        for task in plan:
+            task_id = id(task)
+            if task_id in seen_task_ids:
+                issues.append(f"Duplicate task detected in plan: {task.title}")
+            seen_task_ids.add(task_id)
+
+            if task.duration_minutes <= 0:
+                issues.append(f"Non-positive duration for task: {task.title}")
+
+            if task.priority.lower() not in allowed_priorities:
+                issues.append(f"Invalid priority for task: {task.title}")
+
+            if task.preferred_time and self._time_sort_key(task.preferred_time)[0] == 1:
+                issues.append(f"Invalid preferred time for task: {task.title}")
+
+        source_required_ids = {
+            id(task) for task in source_tasks if task.required and not task.completed
+        }
+        planned_ids = {id(task) for task in plan}
+        if not source_required_ids.issubset(planned_ids):
+            issues.append("One or more required tasks are missing from the plan.")
+
+        return (len(issues) == 0, issues)
+
+    def get_last_plan_metadata(self) -> Dict[str, object]:
+        """Expose plan metadata for UI display and reliability tests."""
+        return self._last_plan_metadata
 
     def mark_task_complete(self, pet: Pet, task: Task) -> Optional[Task]:
         """Mark a task complete and attach the next recurring instance to a pet.
@@ -294,6 +486,27 @@ class Scheduler:
                 explanation += f"   {task.description}\n"
             total_minutes += task.duration_minutes
         
+        explanation += "-" * 40 + "\n"
+        explanation += f"Total Time: {total_minutes} minutes\n"
+        return explanation
+
+    def explain_ai_plan(self, plan: List[Task]) -> str:
+        """Return a readable explanation that includes retrieved knowledge rationale."""
+        if not plan:
+            return "No tasks scheduled for today."
+
+        metadata = self.get_last_plan_metadata()
+        rationale = metadata.get("rationale", {}) if isinstance(metadata, dict) else {}
+        explanation = "AI-Assisted Plan:\n" + "-" * 40 + "\n"
+        total_minutes = 0
+
+        for i, task in enumerate(plan, 1):
+            explanation += f"{i}. {task.title} ({task.duration_minutes} min)\n"
+            notes = rationale.get(task.title, []) if isinstance(rationale, dict) else []
+            if notes:
+                explanation += f"   Why now: {notes[0]}\n"
+            total_minutes += task.duration_minutes
+
         explanation += "-" * 40 + "\n"
         explanation += f"Total Time: {total_minutes} minutes\n"
         return explanation

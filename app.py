@@ -1,5 +1,16 @@
 import streamlit as st
+import logging
+from pathlib import Path
 from pawpal_system import Owner, Pet, Task, Scheduler
+
+
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+logging.basicConfig(
+    filename=LOG_DIR / "pawpal.log",
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -177,8 +188,21 @@ st.divider()
 st.subheader("Build Schedule")
 st.caption("Generate a prioritized daily plan across all pets based on available time and task priorities.")
 
+planner_mode = st.radio(
+    "Planner mode",
+    ["Rule-based", "AI-assisted (retrieval + guardrails)"],
+    horizontal=True,
+)
+
 if st.button("Generate schedule"):
-    schedule = scheduler.build_daily_plan(st.session_state.owner)
+    if planner_mode == "AI-assisted (retrieval + guardrails)":
+        schedule = scheduler.build_ai_daily_plan(st.session_state.owner)
+        plan_text = scheduler.explain_ai_plan(schedule)
+    else:
+        schedule = scheduler.build_daily_plan(st.session_state.owner)
+        plan_text = scheduler.explain_plan(schedule)
+
+    metadata = scheduler.get_last_plan_metadata()
 
     if schedule:
         st.success("Schedule generated!")
@@ -194,6 +218,15 @@ if st.button("Generate schedule"):
                 }
             )
         st.table(schedule_rows)
-        st.text(scheduler.explain_plan(schedule))
+        st.text(plan_text)
+
+        if planner_mode == "AI-assisted (retrieval + guardrails)":
+            st.markdown("### AI Guardrail Status")
+            if metadata.get("guardrail_ok", False):
+                st.success("Guardrails passed. AI plan was accepted.")
+            else:
+                st.warning("Guardrails failed. The system safely fell back to rule-based scheduling.")
+                for issue in metadata.get("guardrail_issues", []):
+                    st.warning(issue)
     else:
         st.warning("No incomplete tasks to schedule. Add pets and tasks above first.")
