@@ -1,77 +1,220 @@
-# PawPal+
+# PawPal+ Applied AI Scheduler
 
-PawPal+ is a Streamlit-based pet care planning assistant. It helps a pet owner organize daily care tasks across multiple pets, prioritize what matters most, and spot schedule conflicts early.
+PawPal+ is an applied AI pet-care planning assistant built with Streamlit and Python. It helps owners coordinate daily care tasks across multiple pets while balancing urgency, available time, and scheduling conflicts. The system matters because it combines transparent rule-based planning with AI-assisted retrieval and reliability checks, so decisions are both useful and auditable.
 
-## Features
+## Original Project (Modules 1-3)
 
-- Multi-pet management: Create an owner profile and add multiple pets, each with its own task list.
-- Task management: Add care tasks with duration, priority, description, required flag, and optional preferred time (`HH:MM`).
-- Priority-based daily planning: `Scheduler.build_daily_plan()` uses task scoring to rank incomplete tasks.
-- Scoring algorithm: `Scheduler.score_task()` increases score for high priority tasks, required tasks, and tasks that fit the owner's available minutes.
-- Sorting by time: `Scheduler.sort_by_time()` orders tasks chronologically using valid `HH:MM` values and pushes invalid/empty times to the end.
-- Filtering views: `Scheduler.filter_tasks()` filters tasks by completion status and optional pet name.
-- Conflict warnings: `Scheduler.detect_time_conflicts()` flags exact same-time collisions (same pet or across pets).
-- Daily/weekly recurrence: Completing recurring tasks through `Scheduler.mark_task_complete()` creates the next task instance via `Task.create_next_instance()`.
-- Plan explanation: `Scheduler.explain_plan()` returns a readable summary with order, duration, and total planned minutes.
-- Professional UI feedback: Streamlit status components (`st.success`, `st.warning`, `st.info`) and `st.table` are used for clear visual output.
+Original project name: **PawPal Starter Scheduler** (from earlier Module 1-3 coursework).
 
-## Project Structure
+The original version focused on object-oriented scheduling fundamentals: tasks, pets, owners, and a basic priority-based daily plan. It could rank tasks, sort by preferred time, and show simple conflict warnings, but it did not include retrieval-augmented reasoning, guardrail-based fallback, or formal reliability evaluation. This final version extends that prototype into a complete applied AI system with integrated AI behavior and testing workflows.
 
-- [app.py](app.py): Streamlit UI and interactive task/schedule workflow.
-- [pawpal_system.py](pawpal_system.py): Core domain models and scheduler logic.
-- [tests/test_pawpal.py](tests/test_pawpal.py): Unit tests for scheduling behaviors.
-- [main.py](main.py): CLI demonstration script for scheduler behavior.
-- [uml_final.mmd](uml_final.mmd): Final Mermaid UML source.
-- [uml_final.png](uml_final.png): Exported UML diagram image.
+## Title and Summary
 
-## Getting Started
+### What the project does
 
-### 1. Install dependencies
+- Collects owner and pet profiles.
+- Accepts pet-care tasks with priority, duration, preferred time, recurrence, and required flags.
+- Generates schedules in rule-based mode.
+- Generates schedules in AI-assisted mode using retrieval-augmented scoring.
+- Validates AI outputs with guardrails and safely falls back when needed.
+- Logs planner behavior and runs reliability experiments.
+
+### Why it matters
+
+Pet-care planning is a real multi-constraint decision problem. PawPal+ shows how to build AI features responsibly: retrieval that changes behavior, guardrails that enforce safety, and tests/evaluations that verify reliability.
+
+## Architecture Overview
+
+System architecture files:
+
+- [assets/diagrams/system_architecture.mmd](assets/diagrams/system_architecture.mmd)
+- [assets/diagrams/uml_final.mmd](assets/diagrams/uml_final.mmd)
+
+```mermaid
+flowchart LR
+		A[User Input in Streamlit UI] --> B[Task and Owner Setup]
+		B --> C[Planner Mode Selection]
+
+		C -->|Rule-based| D[Scheduler.build_daily_plan]
+		C -->|AI-assisted| E[Scheduler.build_ai_daily_plan]
+
+		E --> F[CareKnowledgeBase.retrieve]
+		F --> G[Retrieval-Augmented Scoring]
+		G --> H[Guardrail Validation]
+
+		H -->|Pass| I[AI Plan Accepted]
+		H -->|Fail| J[Fallback to Rule-based Rank]
+
+		D --> K[Schedule Output + Explanation]
+		I --> K
+		J --> K
+
+		K --> L[Streamlit Table and Plan Text]
+		K --> M[Structured Logs logs/pawpal.log]
+
+		N[Reliability Evaluator reliability_eval.py] --> O[Consistency and Guardrail Metrics]
+		O --> P[Human Review and Iteration]
+
+		Q[Pytest Suite tests/test_pawpal.py] --> P
+		L --> P
+```
+
+How data flows through the system:
+
+1. UI collects owner constraints and pet tasks.
+2. Planner mode routes execution into either rule-based or AI-assisted scheduling.
+3. AI-assisted mode retrieves relevant care guidance and boosts task scores.
+4. Guardrails validate the result and trigger fallback if checks fail.
+5. Final plan is displayed, explained, and logged.
+6. Reliability script and tests produce metrics for human review.
+
+Where humans/testing check AI results:
+
+- Human user reviews schedule tables and rationale in the app.
+- [tests/test_pawpal.py](tests/test_pawpal.py) verifies behavior including AI prioritization and fallback.
+- [reliability_eval.py](reliability_eval.py) measures consistency, guardrail failure rate, and fallback usage.
+
+## Setup Instructions
+
+### 1. Clone and enter the project
+
+```bash
+git clone <your-repo-url>
+cd applied-ai-system-project
+```
+
+### 2. Create and activate a virtual environment
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the app
+### 4. Run the app
 
 ```bash
 streamlit run app.py
 ```
 
-### 3. Run tests
+### 5. Run automated tests
 
 ```bash
 python -m pytest -q
 ```
 
-## How Scheduling Works
+### 6. Run reliability evaluation
 
-1. Owner and pet data are collected from the UI.
-2. Incomplete tasks are gathered across pets.
-3. Tasks are ranked by a score based on priority, required status, and time-fit.
-4. The generated plan is displayed in table form and explained in text.
-5. Additional views allow filtering and time-based sorting.
-6. Conflict detection highlights exact same-time tasks so owners can adjust timing.
+```bash
+python reliability_eval.py
+```
 
-## Testing Coverage
+### 7. Inspect logs
 
-Current tests verify:
+Planner events are written to:
 
-- Task completion and reset behavior.
-- Adding/removing tasks from pets.
-- Chronological sorting and invalid time handling.
-- Recurrence for daily and weekly tasks.
-- Conflict detection for same-pet and cross-pet collisions.
+```text
+logs/pawpal.log
+```
 
-## 📸 Demo
+## Sample Interactions
+
+### Example 1: AI-assisted medication prioritization
+
+Input:
+
+- Pet: dog
+- Task A: Evening play (medium priority)
+- Task B: Give medication (low priority, medication keyword)
+- Mode: AI-assisted
+
+Resulting AI output:
+
+- "Give medication" is ranked before "Evening play" because retrieval guidance boosts medication urgency.
+
+### Example 2: Guardrail validation and safe fallback
+
+Input:
+
+- Task with invalid priority (`urgent`) and invalid preferred time (`25:99`)
+- Mode: AI-assisted
+
+Resulting AI output:
+
+- Guardrails fail validation.
+- Scheduler falls back to rule-based ranking.
+- Guardrail issues are surfaced in UI and logs.
+
+### Example 3: Reliability metrics from batch evaluation
+
+Input command:
+
+```bash
+python reliability_eval.py
+```
+
+Resulting output:
+
+- Trials: 20
+- Unique plan orderings: 1
+- Consistency rate: 100.00%
+- Guardrail failure rate: 0.00%
+- Fallback usage rate: 0.00%
+
+## Design Decisions and Trade-Offs
+
+### Key design decisions
+
+- Kept a rule-based baseline planner for transparency and predictable behavior.
+- Added retrieval-augmented scoring in the same scheduler path so AI directly affects ranking.
+- Added guardrails and fallback to ensure invalid AI outputs never become final plans.
+- Added structured logs and reliability experiments to support trust and debugging.
+
+### Trade-offs
+
+- Retrieval corpus is lightweight and local (fast, explainable), but less expressive than external knowledge sources.
+- Conflict detection checks exact preferred-time matches; it does not yet compute overlap intervals.
+- AI-assisted scoring is deterministic and auditable, but less flexible than full generative planning.
+
+## Testing Summary
+
+What worked:
+
+- Core OOP task management, recurrence, filtering, sorting, and conflict checks.
+- AI-assisted medication prioritization behavior.
+- Guardrail-triggered fallback behavior.
+- Reliability script execution and metric reporting.
+
+What did not work initially:
+
+- Initial retrieval urgency weight for medication was too low to consistently outrank medium-priority play tasks.
+
+What was learned and improved:
+
+- Tuned retrieval boost weights to align behavior with expected care urgency.
+- Added direct tests for AI-specific behavior to prevent regression.
+- Confirmed reproducibility by running reliability trials.
+
+## Reflection
+
+This project reinforced that practical AI engineering is mostly systems design, not just model output. Reliable behavior came from integrating retrieval into core logic, enforcing guardrails, and validating outcomes with tests and experiments. The biggest lesson was to keep AI components observable and reversible: every AI decision path should be explainable, logged, and safely recoverable.
+
+## Project Structure
+
+- [app.py](app.py): Streamlit interface and interactive workflow.
+- [pawpal_system.py](pawpal_system.py): Domain classes, scheduler, retrieval, and guardrails.
+- [main.py](main.py): CLI demonstration.
+- [reliability_eval.py](reliability_eval.py): Reliability experiment runner.
+- [tests/test_pawpal.py](tests/test_pawpal.py): Unit and AI-behavior tests.
+- [assets/diagrams/system_architecture.mmd](assets/diagrams/system_architecture.mmd): Architecture flow diagram.
+- [assets/diagrams/uml_final.mmd](assets/diagrams/uml_final.mmd): Class-level design diagram.
+- [assets/screenshots/pawpal_app_screenshot.png](assets/screenshots/pawpal_app_screenshot.png): UI screenshot.
+
+## Demo
 
 ![PawPal App](assets/screenshots/pawpal_app_screenshot.png)
-
-## UML
-
-Final UML files:
-
-![Mermaid Source](assets/diagrams/uml_final.mmd)
-![System UML](assets/diagrams/uml_final.png)

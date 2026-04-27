@@ -1,0 +1,26 @@
+flowchart LR
+    A[User Input in Streamlit UI] --> B[Task and Owner Setup]
+    B --> C[Planner Mode Selection]
+
+    C -->|Rule-based| D[Scheduler.build_daily_plan]
+    C -->|AI-assisted| E[Scheduler.build_ai_daily_plan]
+
+    E --> F[CareKnowledgeBase.retrieve]
+    F --> G[Retrieval-Augmented Scoring]
+    G --> H[Guardrail Validation]
+
+    H -->|Pass| I[AI Plan Accepted]
+    H -->|Fail| J[Fallback to Rule-based Rank]
+
+    D --> K[Schedule Output + Explanation]
+    I --> K
+    J --> K
+
+    K --> L[Streamlit Table and Plan Text]
+    K --> M[Structured Logs logs/pawpal.log]
+
+    N[Reliability Evaluator reliability_eval.py] --> O[Consistency and Guardrail Metrics]
+    O --> P[Human Review and Iteration]
+
+    Q[Pytest Suite tests/test_pawpal.py] --> P
+    L --> P
