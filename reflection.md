@@ -212,3 +212,34 @@ In another iteration, I would redesign conflict detection to account for duratio
 **c. Key takeaway**
 
 My key takeaway is that AI is most valuable when I act as the **lead architect**: I define boundaries, constraints, and quality checks, then use Copilot to accelerate implementation details. The best results came from clear prompts, phased workflow, and verification discipline rather than accepting generated code blindly.
+
+---
+
+## 6. Reflection and Ethics
+
+**a. Limitations and potential bias**
+
+- The retrieval component uses a small, hand-authored care knowledge base, so it may over-represent the task patterns I included (for example medication and feeding) and under-represent less common care routines.
+- Species handling is simplified (dog/cat/all), which can miss breed-specific, age-specific, or medical-context nuance.
+- Conflict detection currently checks only exact start-time matches and not duration overlaps, so it can underestimate true scheduling conflicts.
+
+**b. Misuse risks and prevention**
+
+Potential misuse is treating the scheduler as a medical authority instead of a planning aid. A user could over-trust ranked output and skip professional advice for urgent health issues.
+
+To reduce misuse, I built guardrails and transparency features:
+
+- Validation rules reject malformed outputs and force fallback to safe rule-based scheduling.
+- Logs record decisions and guardrail failures so behavior is auditable.
+- Explanations show why tasks were prioritized, so users can challenge the result instead of blindly trusting it.
+
+In a future version, I would add explicit UI disclaimers such as: "Not a veterinary diagnosis tool."
+
+**c. Reliability surprise during testing**
+
+The most surprising finding was how sensitive ranking behavior was to retrieval boost weights. In an early test, a medium-priority play task outranked a low-priority medication task, which was not the intended outcome. After tuning the boost and adding a direct test for this case, reliability became stable and reproducible across evaluation trials.
+
+**d. Collaboration with AI: one helpful and one flawed suggestion**
+
+- Helpful suggestion: AI recommended integrating retrieval, guardrails, and fallback into the same scheduling path rather than a separate demo script. That improved both architecture quality and rubric alignment because AI behavior now directly changes real app output.
+- Flawed suggestion: an early AI-generated weight configuration under-prioritized medication-related tasks. I caught this through testing, adjusted the urgency boost, and added regression tests so the issue would not return.
