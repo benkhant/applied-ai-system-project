@@ -243,3 +243,57 @@ class TestConflictDetection:
         warnings = scheduler.detect_time_conflicts(owner)
 
         assert warnings == []
+
+
+class TestAIAssistedPlanning:
+    """Test AI-assisted retrieval ranking and guardrail fallback behavior."""
+
+    def test_ai_planning_boosts_medication_task_priority(self):
+        scheduler = Scheduler()
+        owner = Owner(name="Ava", available_minutes=60)
+        dog = Pet(name="Milo", species="dog", age=4)
+
+        dog.add_task(
+            Task(
+                title="Evening play",
+                duration_minutes=20,
+                priority="medium",
+                description="Play fetch in the yard",
+            )
+        )
+        dog.add_task(
+            Task(
+                title="Give medication",
+                duration_minutes=5,
+                priority="low",
+                description="Administer pill with snack",
+            )
+        )
+        owner.add_pet(dog)
+
+        plan = scheduler.build_ai_daily_plan(owner)
+
+        assert plan[0].title == "Give medication"
+
+    def test_ai_planning_falls_back_when_guardrails_fail(self):
+        scheduler = Scheduler()
+        owner = Owner(name="Ava", available_minutes=60)
+        cat = Pet(name="Luna", species="cat", age=2)
+
+        cat.add_task(
+            Task(
+                title="Feed Luna",
+                duration_minutes=10,
+                priority="urgent",
+                preferred_time="25:99",
+                required=True,
+            )
+        )
+        owner.add_pet(cat)
+
+        scheduler.build_ai_daily_plan(owner)
+        metadata = scheduler.get_last_plan_metadata()
+
+        assert metadata["fallback_used"] is True
+        assert metadata["guardrail_ok"] is False
+        assert any("Invalid priority" in issue for issue in metadata["guardrail_issues"])
